@@ -431,7 +431,7 @@ with col_right:
                 </div>
                 <div class="detail-field">
                     <div class="detail-label">Registered At</div>
-                    <div class="detail-value">{pd.to_datetime(dev['created_at']).strftime('%Y-%m-%d %H:%M')}</div>
+                    <div class="detail-value">{pd.to_datetime(dev['created_at']).strftime('%Y-%m-%d %H:%M')} UTC</div>
                 </div>
             </div>
         </div>
