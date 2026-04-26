@@ -460,7 +460,7 @@ with col_right:
                     for _, row in open_a.iterrows():
                         sev   = row["severity"]
                         emoji = {"critical":"🔴","high":"🟠","medium":"🟡","low":"🟢"}.get(sev,"⚪")
-                        time_ = pd.to_datetime(row["created_at"]).strftime("%Y-%m-%d %H:%M")
+                        time_ = pd.to_datetime(row["created_at"]).strftime("%Y-%m-%d %H:%M UTC")
                         st.markdown(f"""
                         <div class="alert-card {sev}">
                             <div class="alert-event">{emoji} [{sev.upper()}] {row['event_type']}</div>
