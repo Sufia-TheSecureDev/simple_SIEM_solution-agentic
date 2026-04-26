@@ -243,7 +243,6 @@ hr { border-color: #1e3a5f !important; }
 # ══════════════════════════════════════════════════════════════════════════════
 # DB
 # ══════════════════════════════════════════════════════════════════════════════
-@st.cache_resource
 def get_conn():
     return psycopg2.connect(
         host=st.secrets["DB_HOST"], database=st.secrets["DB_NAME"],
@@ -253,47 +252,48 @@ def get_conn():
 
 @st.cache_data(ttl=30)
 def load_all():
-    conn = get_conn()
+    conn = get_conn()   # fresh connection every 30s
+    try:
+        devices = pd.read_sql("""
+            SELECT id, hostname, ip_address,
+                   COALESCE(location, 'Unknown') as location,
+                   COALESCE(timezone, 'UTC')     as timezone,
+                   COALESCE(os, 'Unknown')       as os,
+                   created_at
+            FROM devices ORDER BY created_at DESC
+        """, conn)
 
-    devices = pd.read_sql("""
-        SELECT id, hostname, ip_address,
-               COALESCE(location, 'Unknown') as location,
-               COALESCE(timezone, 'UTC')     as timezone,
-               COALESCE(os, 'Unknown')       as os,
-               created_at
-        FROM devices ORDER BY created_at DESC
-    """, conn)
+        events = pd.read_sql("""
+            SELECT e.id, e.device_id, d.hostname, d.ip_address,
+                   e.event_type, e.severity, e.description, e.created_at
+            FROM events e
+            JOIN devices d ON e.device_id = d.id
+            ORDER BY e.created_at DESC
+            LIMIT 500
+        """, conn)
 
-    events = pd.read_sql("""
-        SELECT e.id, e.device_id, d.hostname, d.ip_address,
-               e.event_type, e.severity, e.description, e.created_at
-        FROM events e
-        JOIN devices d ON e.device_id = d.id
-        ORDER BY e.created_at DESC
-        LIMIT 500
-    """, conn)
+        alerts = pd.read_sql("""
+            SELECT a.id, a.status, a.notified_at, a.created_at,
+                   e.event_type, e.severity, e.description,
+                   e.device_id, d.hostname
+            FROM alerts a
+            JOIN events e ON a.event_id = e.id
+            JOIN devices d ON e.device_id = d.id
+            ORDER BY a.created_at DESC
+            LIMIT 200
+        """, conn)
 
-    alerts = pd.read_sql("""
-        SELECT a.id, a.status, a.notified_at, a.created_at,
-               e.event_type, e.severity, e.description,
-               e.device_id, d.hostname
-        FROM alerts a
-        JOIN events e ON a.event_id = e.id
-        JOIN devices d ON e.device_id = d.id
-        ORDER BY a.created_at DESC
-        LIMIT 200
-    """, conn)
+        sev_counts = pd.read_sql(
+            "SELECT severity, COUNT(*) as count FROM events GROUP BY severity", conn)
 
-    sev_counts = pd.read_sql("""
-        SELECT severity, COUNT(*) as count FROM events GROUP BY severity
-    """, conn)
+        type_counts = pd.read_sql("""
+            SELECT event_type, COUNT(*) as count FROM events
+            GROUP BY event_type ORDER BY count DESC
+        """, conn)
 
-    type_counts = pd.read_sql("""
-        SELECT event_type, COUNT(*) as count FROM events
-        GROUP BY event_type ORDER BY count DESC
-    """, conn)
-
-    return devices, events, alerts, sev_counts, type_counts
+        return devices, events, alerts, sev_counts, type_counts
+    finally:
+        conn.close()  # always close after loading
 
 # ══════════════════════════════════════════════════════════════════════════════
 # LOAD DATA
