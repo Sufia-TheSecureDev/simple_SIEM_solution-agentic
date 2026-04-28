@@ -20,7 +20,7 @@
 """
 Sufia's SIEM Dashboard — Streamlit
 Layout: left sidebar = device list, right panel = device detail + tabs
-FIX: Device selection now properly filters right panel per selected device
+FIX: st.radio with CSS-styled labels — fully clickable device cards, no overlay hacks
 """
 
 import streamlit as st
@@ -34,9 +34,11 @@ st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Sora:wght@300;400;600;700&display=swap');
 html, body, [class*="css"] { font-family: 'Sora', sans-serif; background-color: #080c14; color: #c9d1d9; }
+
 .siem-header { background: linear-gradient(135deg, #0d1f3c 0%, #0a1628 100%); border: 1px solid #1e3a5f; border-radius: 12px; padding: 20px 28px; margin-bottom: 20px; }
 .siem-title { font-family: 'JetBrains Mono', monospace; font-size: 1.8rem; font-weight: 700; color: #58a6ff; margin: 0; }
 .siem-subtitle { font-size: 0.78rem; color: #6e7f96; margin: 0; font-family: 'JetBrains Mono', monospace; }
+
 .kpi-row { display: flex; gap: 12px; margin-bottom: 24px; }
 .kpi-card { flex: 1; background: #0d1f3c; border: 1px solid #1e3a5f; border-radius: 10px; padding: 16px 20px; text-align: center; position: relative; overflow: hidden; }
 .kpi-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; }
@@ -52,15 +54,13 @@ html, body, [class*="css"] { font-family: 'Sora', sans-serif; background-color: 
 .kpi-value.critical { color: #f85149; }
 .kpi-value.high     { color: #e3b341; }
 .kpi-value.alerts   { color: #bc8cff; }
-.device-card { background: #0d1f3c; border: 1px solid #1e3a5f; border-radius: 8px; padding: 12px 14px; margin-bottom: 8px; }
-.device-card.selected { border-color: #58a6ff; background: #112240; }
-.device-hostname { font-family: 'JetBrains Mono', monospace; font-size: 0.82rem; font-weight: 600; color: #58a6ff; margin-bottom: 4px; }
-.device-meta { font-size: 0.72rem; color: #6e7f96; }
+
 .detail-card { background: #0d1f3c; border: 1px solid #1e3a5f; border-radius: 10px; padding: 20px 24px; margin-bottom: 20px; }
 .detail-title { font-family: 'JetBrains Mono', monospace; font-size: 1rem; font-weight: 700; color: #58a6ff; margin-bottom: 16px; padding-bottom: 10px; border-bottom: 1px solid #1e3a5f; }
 .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .detail-label { font-size: 0.68rem; color: #6e7f96; text-transform: uppercase; letter-spacing: 1px; font-family: 'JetBrains Mono', monospace; margin-bottom: 3px; }
 .detail-value { font-size: 0.88rem; color: #e6edf3; font-weight: 500; }
+
 .alert-card { background: #0d1f3c; border-left: 4px solid #f85149; border-radius: 0 8px 8px 0; padding: 14px 16px; margin-bottom: 10px; }
 .alert-card.high   { border-left-color: #e3b341; }
 .alert-card.medium { border-left-color: #3fb950; }
@@ -68,17 +68,70 @@ html, body, [class*="css"] { font-family: 'Sora', sans-serif; background-color: 
 .alert-event { font-family: 'JetBrains Mono', monospace; font-size: 0.82rem; font-weight: 600; color: #e6edf3; margin-bottom: 6px; }
 .alert-desc  { font-size: 0.78rem; color: #8b949e; line-height: 1.5; margin-bottom: 8px; }
 .alert-meta  { font-size: 0.7rem; color: #6e7f96; font-family: 'JetBrains Mono', monospace; }
+
 .section-label { font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; color: #6e7f96; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 12px; padding-bottom: 6px; border-bottom: 1px solid #1e3a5f; }
+
 .stButton > button { background: #1e3a5f !important; border: 1px solid #58a6ff !important; color: #58a6ff !important; font-family: 'JetBrains Mono', monospace !important; font-size: 0.78rem !important; border-radius: 6px !important; }
 .stButton > button:hover { background: #58a6ff !important; color: #080c14 !important; }
+
 .stTabs [data-baseweb="tab-list"] { background: #0d1f3c; border-radius: 8px 8px 0 0; border: 1px solid #1e3a5f; border-bottom: none; gap: 0; }
 .stTabs [data-baseweb="tab"] { color: #6e7f96 !important; font-family: 'JetBrains Mono', monospace !important; font-size: 0.78rem !important; padding: 10px 20px !important; }
 .stTabs [aria-selected="true"] { background: #112240 !important; color: #58a6ff !important; border-bottom: 2px solid #58a6ff !important; }
 .stTabs [data-baseweb="tab-panel"] { background: #0a1628; border: 1px solid #1e3a5f; border-top: none; border-radius: 0 0 8px 8px; padding: 16px !important; }
+
 hr { border-color: #1e3a5f !important; }
-/* Hide default radio button circles */
+
+/* ═══════════════════════════════════════════════════
+   DEVICE SELECTION — radio labels styled as cards
+   ═══════════════════════════════════════════════════ */
+
+/* Remove gap between radio items */
 div[data-testid="stRadio"] > div { gap: 0 !important; }
-div[data-testid="stRadio"] label { display: none !important; }
+
+/* Each radio item wrapper fills full width */
+div[data-testid="stRadio"] [data-baseweb="radio"] {
+    width: 100% !important;
+    align-items: flex-start !important;
+}
+
+/* Hide the radio circle dot */
+div[data-testid="stRadio"] [data-baseweb="radio"] > div:first-child {
+    display: none !important;
+}
+
+/* Style the label as a device card — fully clickable */
+div[data-testid="stRadio"] label {
+    display: flex !important;
+    flex-direction: column !important;
+    width: 100% !important;
+    background: #0d1f3c !important;
+    border: 1px solid #1e3a5f !important;
+    border-radius: 8px !important;
+    padding: 12px 14px !important;
+    margin-bottom: 8px !important;
+    cursor: pointer !important;
+    white-space: pre-line !important;
+    font-family: 'JetBrains Mono', monospace !important;
+    font-size: 0.82rem !important;
+    font-weight: 600 !important;
+    color: #58a6ff !important;
+    line-height: 1.8 !important;
+    transition: border-color 0.15s ease, background 0.15s ease !important;
+    box-sizing: border-box !important;
+}
+
+/* Hover state */
+div[data-testid="stRadio"] label:hover {
+    border-color: #58a6ff !important;
+    background: #0f2035 !important;
+}
+
+/* Selected / checked state — highlight the active card */
+div[data-testid="stRadio"] [data-baseweb="radio"]:has(input:checked) label {
+    border-color: #58a6ff !important;
+    background: #112240 !important;
+    box-shadow: 0 0 0 1px #58a6ff !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -181,6 +234,7 @@ st.markdown(f"""
 # ══════════════════════════════════════════════════════════════════════════════
 col_left, col_right = st.columns([1, 3], gap="medium")
 
+# LEFT: device list with st.radio cards
 with col_left:
     st.markdown('<div class="section-label">Registered Devices</div>', unsafe_allow_html=True)
 
@@ -188,46 +242,27 @@ with col_left:
         st.info("No devices registered yet.")
         selected_device_id = None
     else:
-        # ── KEY FIX: use device ID as the selector value, not hostname ────────
-        # This ensures unique selection even if two devices have same hostname
-        device_id_list = devices["id"].tolist()
+        # Build options & labels for radio: use IDs as options, custom labels via format_func
+        device_ids = devices["id"].tolist()
 
-        # Build display labels for selectbox
-        device_labels = {}
-        for _, dev in devices.iterrows():
-            dev_alerts_count = 0
-            if not alerts.empty:
-                dev_alerts_count = int((alerts[alerts["device_id"] == dev["id"]]["status"] == "open").sum())
-            alert_tag = f" ⚠{dev_alerts_count}" if dev_alerts_count > 0 else " ●"
-            device_labels[dev["id"]] = f"{dev['hostname']}{alert_tag}"
-
-        # Use st.radio with device IDs — this is the KEY fix
-        # format_func converts ID to display label
-        selected_device_id = st.radio(
-            label="select_device",
-            options=device_id_list,
-            format_func=lambda x: device_labels.get(x, str(x)),
-            label_visibility="collapsed"
-        )
-
-        # Show device info cards below radio (cosmetic only)
-        for _, dev in devices.iterrows():
-            is_sel = dev["id"] == selected_device_id
-            card_class = "device-card selected" if is_sel else "device-card"
+        # Precompute open-alert count per device for labels
+        def make_label(dev_id):
+            dev = devices[devices["id"] == dev_id].iloc[0]
             dev_open = 0
             if not alerts.empty:
-                dev_open = int((alerts[alerts["device_id"] == dev["id"]]["status"] == "open").sum())
-            badge = (f'<span style="color:#f85149;font-size:0.7rem">⚠ {dev_open} alerts</span>'
-                     if dev_open > 0 else
-                     '<span style="color:#3fb950;font-size:0.7rem">● online</span>')
-            st.markdown(f"""
-            <div class="{card_class}">
-                <div class="device-hostname">{dev['hostname']}</div>
-                <div class="device-meta">{dev['ip_address']}</div>
-                <div class="device-meta">{dev['location']}</div>
-                <div style="margin-top:5px">{badge}</div>
-            </div>
-            """, unsafe_allow_html=True)
+                dev_open = int((alerts[alerts["device_id"] == dev_id]["status"] == "open").sum())
+            badge = f"⚠ {dev_open} alerts" if dev_open > 0 else "● online"
+            # Multiline label: hostname, ip, location, badge
+            return f"{dev['hostname']}\n{dev['ip_address']} • {dev['location']}\n{badge}"
+
+        selected_device_id = st.radio(
+            "Select a device",
+            options=device_ids,
+            index=0 if len(device_ids) > 0 else None,
+            format_func=make_label,
+            label_visibility="collapsed",
+            key="device_radio"
+        )
 
     st.divider()
     if st.button("🔄 Refresh"):
@@ -235,24 +270,22 @@ with col_left:
         st.rerun()
 
 # ══════════════════════════════════════════════════════════════════════════════
-# RIGHT PANEL — filtered strictly by selected_device_id
+# RIGHT PANEL — filtered by selected_device_id
 # ══════════════════════════════════════════════════════════════════════════════
 with col_right:
     if selected_device_id is None or devices.empty:
         st.info("← Select a device from the left to view its details.")
     else:
-        # Get the selected device row by ID — guaranteed unique
         dev_row = devices[devices["id"] == selected_device_id]
         if dev_row.empty:
             st.warning("Device not found.")
         else:
             dev = dev_row.iloc[0]
 
-            # Filter events and alerts strictly by device_id
             dev_events = events[events["device_id"] == selected_device_id].copy() if not events.empty else pd.DataFrame()
             dev_alerts = alerts[alerts["device_id"] == selected_device_id].copy() if not alerts.empty else pd.DataFrame()
 
-            # ── Device Detail Card ────────────────────────────────────────────
+            # Device Detail Card
             st.markdown(f"""
             <div class="detail-card">
                 <div class="detail-title">📡 Device Details — {dev['hostname']}</div>
@@ -293,10 +326,10 @@ with col_right:
             </div>
             """, unsafe_allow_html=True)
 
-            # ── Tabs ──────────────────────────────────────────────────────────
+            # Tabs
             tab_alerts, tab_events, tab_stats = st.tabs(["🚨 Alerts", "📋 Events", "📊 Stats"])
 
-            # ── Alerts Tab ────────────────────────────────────────────────────
+            # Alerts Tab
             with tab_alerts:
                 if dev_alerts.empty:
                     st.info("No alerts for this device.")
@@ -322,23 +355,29 @@ with col_right:
 
                     if not closed_a.empty:
                         with st.expander(f"Resolved Alerts ({len(closed_a)})"):
-                            st.dataframe(closed_a[["event_type","severity","created_at","status"]],
-                                         use_container_width=True)
+                            st.dataframe(
+                                closed_a[["event_type","severity","created_at","status"]],
+                                use_container_width=True
+                            )
 
-            # ── Events Tab ────────────────────────────────────────────────────
+            # Events Tab
             with tab_events:
                 if dev_events.empty:
                     st.info("No events for this device.")
                 else:
                     col_a, col_b = st.columns(2)
-                    sev_filter  = col_a.multiselect("Severity",
+                    sev_filter  = col_a.multiselect(
+                        "Severity",
                         ["critical","high","medium","low"],
                         default=["critical","high","medium","low"],
-                        key=f"sev_{selected_device_id}")
-                    type_filter = col_b.multiselect("Event Type",
+                        key=f"sev_{selected_device_id}"
+                    )
+                    type_filter = col_b.multiselect(
+                        "Event Type",
                         dev_events["event_type"].unique().tolist(),
                         default=dev_events["event_type"].unique().tolist(),
-                        key=f"typ_{selected_device_id}")
+                        key=f"typ_{selected_device_id}"
+                    )
 
                     filtered = dev_events[
                         dev_events["severity"].isin(sev_filter) &
@@ -350,7 +389,7 @@ with col_right:
                         use_container_width=True
                     )
 
-            # ── Stats Tab ─────────────────────────────────────────────────────
+            # Stats Tab
             with tab_stats:
                 if dev_events.empty:
                     st.info("No data yet.")
